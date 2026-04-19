@@ -798,7 +798,7 @@ tbody td{padding:12px 20px;font-size:13.5px;vertical-align:middle}
     <div style="border:1px solid var(--border);border-radius:var(--r);overflow:hidden;margin-bottom:16px">
       <div class="info-row" style="padding:9px 14px"><span class="info-key">SSH Host</span><span class="info-val" id="d-host">-</span></div>
       <div class="info-row" style="padding:9px 14px"><span class="info-key">SSH Port</span><span class="info-val" id="d-port">-</span></div>
-      <div class="info-row" style="padding:9px 14px"><span class="info-key">Web Port</span><span class="info-val" id="d-web">-</span></div>
+      <div class="info-row" style="padding:9px 14px"><span class="info-key">Web URL</span><span class="info-val"><a id="d-web" href="#" target="_blank" style="color:var(--accent);text-decoration:none">-</a></span></div>
       <div class="info-row" style="padding:9px 14px"><span class="info-key">Username SSH</span><span class="info-val">root</span></div>
       <div class="info-row" style="padding:9px 14px"><span class="info-key">Password</span><span class="info-val"><span id="d-pass">•••••••</span> <button class="copy-btn" onclick="togglePass()">👁</button></span></div>
       <div class="info-row" style="padding:9px 14px;border-bottom:none"><span class="info-key">Dibuat</span><span class="info-val" id="d-date">-</span></div>
@@ -1001,7 +1001,17 @@ async function showDetailModal(id) {
     const bc = res.status==='running'?'badge-running':'badge-stopped';
     document.getElementById('d-status').innerHTML = `<span class="badge ${bc}"><span class="badge-dot"></span>${res.status}</span>`;
     document.getElementById('d-port').innerHTML = `${res.ssh_port} <button class="copy-btn" onclick="copyText('${res.ssh_port}')">⧉</button>`;
-    document.getElementById('d-web').textContent = res.web_port;
+    const webEl = document.getElementById('d-web');
+    if (res.web_port && res.web_port !== '-') {
+      const udata = res.user_data;
+      const username = udata ? udata[0].trim() : res.id.replace('server','');
+      const webUrl = 'http://' + username + '.tugaspkl.my.id';
+      webEl.href = webUrl;
+      webEl.textContent = webUrl;
+    } else {
+      webEl.textContent = '-';
+      webEl.removeAttribute('href');
+    }
     document.getElementById('d-pass').textContent = '•••••••';
     document.getElementById('d-host').textContent = res.ip;
     document.getElementById('d-sshcmd').textContent = ` ssh root@${res.ip} -p ${res.ssh_port}`;
