@@ -36,12 +36,12 @@ function getWAConfig() {
 function sendWA($number, $message) {
     $wa = getWAConfig();
     if (!$wa['token'] || $wa['token']==='isi_token_fonnte_kamu') return false;
-    $ch = curl_init('https://fontee.id/api/send');
+    $ch = curl_init('https://api.fonnte.com/send');
     curl_setopt_array($ch, [
         CURLOPT_POST => true,
         CURLOPT_RETURNTRANSFER => true,
-        CURLOPT_HTTPHEADER => ['Authorization: '.$wa['token']],
-        CURLOPT_POSTFIELDS => ['target'=>$number,'message'=>$message,'countryCode'=>'62']
+        CURLOPT_HTTPHEADER => ['Authorization: '.$wa['token'], 'Content-Type: application/json'],
+        CURLOPT_POSTFIELDS => json_encode(['target'=>$number,'message'=>$message])
     ]);
     $res = curl_exec($ch);
     curl_close($ch);
@@ -99,7 +99,9 @@ function getUserList() {
             $data = trim(file_get_contents(CHECKDATA2_DIR.$f));
             $parts = array_map('trim', explode(',', $data));
             $expired = $parts[7] ?? '-';
-            $exp_ts = strtotime(str_replace('-','/',$expired));
+            // Convert d-m-Y ke Y-m-d untuk strtotime
+            $exp_parts = explode('-', $expired);
+            $exp_ts = (count($exp_parts) === 3) ? mktime(0,0,0,(int)$exp_parts[1],(int)$exp_parts[0],(int)$exp_parts[2]) : 0;
             $diff = $exp_ts ? round(($exp_ts-time())/86400) : 0;
             $users[] = [
                 'username'=>$parts[0]??'', 'password'=>$parts[1]??'',
@@ -206,6 +208,8 @@ if (isset($_POST['action']) && isset($_SESSION['logged_in'])) {
         // WA notif
         if ($wa && $wa!=='-') sendWA($wa, "✅ VPS Anda berhasil dibuat!\nUsername: $user\nSSH Port: $port\nPassword: $pass\nExpired: $expired\nSSH: ssh root@".getServerIP()." -p $port");
         logActivity("VPS server{$port} dibuat untuk user $user ($email)",'create');
+        // Buat user Linux untuk SSH
+        shell_exec("/usr/local/bin/create-vps-user.sh $user $pass server{$port} 2>/dev/null &");
         echo json_encode(['success'=>true,'msg'=>"VPS server{$port} berhasil dibuat",'output'=>$out,'port'=>$port,'webport'=>$webport]);
         exit;
     }
