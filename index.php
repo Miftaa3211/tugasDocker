@@ -84,7 +84,7 @@ function getDockerContainers() {
                 'id'=>$name, 'user'=>str_replace('server','',$name),
                 'ssh'=>$ssh_port, 'web'=>$web_port,
                 'status'=>$running?'running':'stopped',
-                'cpu'=>rand(5,85), 'date'=>date('d-m-Y'),
+                'cpu'=>0, 'date'=>date('d-m-Y'),
             ];
         }
     }
@@ -342,11 +342,22 @@ $wa_conf=$is_logged_in?getWAConfig():['token'=>'','sender'=>''];
 // CPU/RAM/Disk stats
 $cpu_usage=0; $ram_used=0; $ram_total=0; $disk_used=0; $disk_total=0;
 if ($is_logged_in) {
-    $cpu_raw=shell_exec("top -bn1 | grep 'Cpu(s)' | awk '{print $2+$4}'");
-    $cpu_usage=round((float)$cpu_raw);
+    // CPU real
+    $cpu_raw = shell_exec("grep 'cpu ' /proc/stat");
+    $cpu_usage = 0;
+    if ($cpu_raw) {
+        $cpu_parts = preg_split('/\s+/', trim($cpu_raw));
+        $total = array_sum(array_slice($cpu_parts, 1));
+        $idle = $cpu_parts[4] ?? 0;
+        $cpu_usage = $total > 0 ? round((1 - $idle/$total) * 100) : 0;
+    }
+    // RAM real
     $mem=shell_exec("free -m | grep Mem");
+    $ram_total=0; $ram_used=0;
     if ($mem) { preg_match('/Mem:\s+(\d+)\s+(\d+)/',$mem,$mm); $ram_total=$mm[1]??0; $ram_used=$mm[2]??0; }
+    // Disk real
     $disk=shell_exec("df -BG / | tail -1");
+    $disk_total=0; $disk_used=0;
     if ($disk) { preg_match('/(\d+)G\s+(\d+)G/',$disk,$dm); $disk_total=$dm[1]??0; $disk_used=$dm[2]??0; }
 }
 ?>
@@ -669,7 +680,7 @@ tbody td{padding:12px 20px;font-size:13.5px;vertical-align:middle}
             data-date="<?= htmlspecialchars($u['date']) ?>"
             data-container="<?= htmlspecialchars($u['container']) ?>"
             data-password="<?= htmlspecialchars($u['password']) ?>">Detail</button>
-          <button class="btn btn-warning btn-sm" onclick="openRenew('<?= htmlspecialchars($u['email']) ?>','<?= htmlspecialchars($u['username']) ?>')">Perpanjang</button>
+
         </div></td>
       </tr>
       <?php endforeach; if(empty($users)): ?><tr><td colspan="7" style="text-align:center;padding:32px;color:var(--text3)">Belum ada user.</td></tr><?php endif; ?>

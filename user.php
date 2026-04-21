@@ -3,6 +3,45 @@ session_start();
 define('CHECKDATA2_DIR', '/home/checkdata2/');
 if (isset($_GET['logout'])) { session_destroy(); header('Location: /user.php'); exit; }
 $error = '';
+
+// Handle AJAX renew
+if (isset($_POST['action']) && $_POST['action'] === 'renew' && isset($_SESSION['user_logged_in'])) {
+    header('Content-Type: application/json');
+    $voucher = strtoupper(trim($_POST['voucher'] ?? ''));
+    $paket = $_POST['paket'] ?? 'bulanan';
+    $email = $_SESSION['user_data'][2] ?? '';
+
+    $voucher_file = '/usr/lib/cgi-bin/vouchers.txt';
+    $vouchers = array_filter(explode("\n", trim(file_get_contents($voucher_file))));
+    if (!in_array($voucher, $vouchers)) {
+        echo json_encode(['success'=>false,'msg'=>'Voucher tidak valid atau sudah digunakan']);
+        exit;
+    }
+
+    $file = CHECKDATA2_DIR . $email;
+    if (!file_exists($file)) { echo json_encode(['success'=>false,'msg'=>'User tidak ditemukan']); exit; }
+    $data = trim(file_get_contents($file));
+    $parts = array_map('trim', explode(',', rtrim($data, '.')));
+    $durasi = ($paket === 'tahunan') ? 365 : 30;
+    $cur_exp = $parts[7] ?? date('d-m-Y');
+    $exp_parts = explode('-', $cur_exp);
+    $cur_ts = (count($exp_parts) === 3) ? mktime(0,0,0,(int)$exp_parts[1],(int)$exp_parts[0],(int)$exp_parts[2]) : time();
+    $base = ($cur_ts > time()) ? $cur_ts : time();
+    $new_expired = date('d-m-Y', $base + ($durasi * 86400));
+    $parts[6] = $paket;
+    $parts[7] = $new_expired;
+    $new_data = implode(', ', $parts) . '.';
+    file_put_contents($file, $new_data);
+
+    $vouchers = array_filter($vouchers, fn($v) => $v !== $voucher);
+    file_put_contents($voucher_file, implode("\n", array_values($vouchers)));
+
+    $_SESSION['user_data'][6] = $paket;
+    $_SESSION['user_data'][7] = $new_expired;
+
+    echo json_encode(['success'=>true,'msg'=>"VPS diperpanjang hingga $new_expired"]);
+    exit;
+}
 if (isset($_POST['login'])) {
     $username = strtolower(trim($_POST['username'] ?? ''));
     $password = trim($_POST['password'] ?? '');
@@ -24,8 +63,11 @@ $u = $_SESSION['user_data'] ?? [];
 $username=$u[0]??'';$password=$u[1]??'';$email=$u[2]??'';$wa=$u[3]??'';
 $tgl_daftar=$u[4]??'';$port=$u[5]??'';$paket=$u[6]??'bulanan';
 $expired=$u[7]??'-';$container=rtrim($u[8]??'-','.');
-$server_ip='103.175.225.238';$web_port='';
+$server_ip='103.175.225.238';$web_port='';$container_status='stopped';
 if ($container && $container !== '-') {
+    // Cek status real-time
+    $running = shell_exec("docker ps --format '{{.Names}}' 2>/dev/null");
+    $container_status = (strpos($running, $container) !== false) ? 'running' : 'stopped';
     $inspect = shell_exec("docker inspect $container 2>/dev/null");
     $data = json_decode($inspect, true);
     if ($data && isset($data[0])) {
@@ -116,7 +158,8 @@ body{font-family:sans-serif;background:var(--bg);color:var(--text);min-height:10
     <div class="card">
       <div class="card-title">🖥️ Info VPS</div>
       <div class="row"><span class="key">Container</span><span class="val"><?= htmlspecialchars($container) ?></span></div>
-      <div class="row"><span class="key">Status</span><span class="val"><span class="badge-run">● Running</span></span></div>
+      <div class="row"><span class="key">Status</span><span class="val"><span style="display:inline-flex;align-items:center;gap:4px;padding:3px 9px;border-radius:20px;font-size:11px;font-weight:600;<?= $container_status==='running'?'background:rgba(52,211,153,.12);color:#34d399;border:1px solid rgba(52,211,153,.2)':'background:rgba(248,113,113,.12);color:#f87171;border:1px solid rgba(248,113,113,.2)' ?>"><span style="width:6px;height:6px;border-radius:50%;background:currentColor;display:inline-block"></span><?= ucfirst($container_status) ?></span></span></div>
+
       <div class="row"><span class="key">SSH Host</span><span class="val"><?= $server_ip ?> <button class="copy-btn" onclick="cp('<?= $server_ip ?>')">copy</button></span></div>
       <div class="row"><span class="key">SSH Port</span><span class="val"><?= htmlspecialchars($port) ?> <button class="copy-btn" onclick="cp('<?= htmlspecialchars($port) ?>')">copy</button></span></div>
       <div class="row"><span class="key">Password SSH</span><span class="val"><span id="pw">••••••••</span> <button class="copy-btn" onclick="tp('<?= htmlspecialchars($password) ?>')">lihat</button></span></div>
@@ -136,11 +179,134 @@ body{font-family:sans-serif;background:var(--bg);color:var(--text);min-height:10
     <span style="color:#38bdf8">$</span> ssh root@<?= $server_ip ?> -p <?= htmlspecialchars($port) ?>
     <button class="copy-btn" onclick="cp('ssh root@<?= $server_ip ?> -p <?= htmlspecialchars($port) ?>')">copy</button>
   </div>
+  <div style="text-align:center;margin-top:16px">
+    <button onclick="openRenew()" style="background:#38bdf8;color:#0a0e1a;border:none;padding:10px 24px;border-radius:10px;cursor:pointer;font-size:14px;font-weight:600">&#x1F504; Perpanjang VPS</button>
+  </div>
 </div>
 <?php endif; ?>
 <script>
 function cp(t){navigator.clipboard.writeText(t).then(()=>{const e=document.createElement('div');e.style.cssText='position:fixed;bottom:24px;right:24px;background:#111827;border:1px solid rgba(99,179,237,0.25);border-radius:10px;padding:12px 20px;font-size:13px;color:#e2e8f0;z-index:9999';e.textContent='✓ Disalin: '+t;document.body.appendChild(e);setTimeout(()=>e.remove(),2500)})}
 let ps=false;function tp(p){const e=document.getElementById('pw');ps=!ps;e.textContent=ps?p:'••••••••'}
+</script>
+
+<!-- MODAL PERPANJANG -->
+<div id="modal-renew" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:1000;align-items:center;justify-content:center">
+  <div style="background:#111827;border:1px solid rgba(99,179,237,0.25);border-radius:14px;padding:28px;width:100%;max-width:420px">
+    <h3 style="font-size:16px;font-weight:600;margin-bottom:20px">🔄 Perpanjang VPS</h3>
+    <div style="margin-bottom:16px">
+      <label style="display:block;font-size:12px;color:#64748b;margin-bottom:6px;text-transform:uppercase">Paket</label>
+      <select id="renew-paket" style="width:100%;background:#1a2235;border:1px solid rgba(99,179,237,0.12);border-radius:10px;padding:9px 12px;color:#e2e8f0;font-size:13.5px;outline:none">
+        <option value="bulanan">Bulanan (+30 hari)</option>
+        <option value="tahunan">Tahunan (+365 hari)</option>
+      </select>
+    </div>
+    <div style="margin-bottom:20px">
+      <label style="display:block;font-size:12px;color:#64748b;margin-bottom:6px;text-transform:uppercase">Kode Voucher</label>
+      <input type="text" id="renew-voucher" placeholder="ABCD1234" style="width:100%;background:#1a2235;border:1px solid rgba(99,179,237,0.12);border-radius:10px;padding:9px 12px;color:#e2e8f0;font-size:13.5px;outline:none;text-transform:uppercase">
+    </div>
+    <div id="renew-msg" style="display:none;padding:10px;border-radius:8px;font-size:12px;margin-bottom:16px;text-align:center"></div>
+    <div style="display:flex;gap:10px;justify-content:flex-end">
+      <button onclick="document.getElementById('modal-renew').style.display='none'" style="background:transparent;border:1px solid rgba(99,179,237,0.25);color:#94a3b8;padding:7px 14px;border-radius:10px;cursor:pointer;font-size:13px">Batal</button>
+      <button onclick="doRenew()" style="background:#38bdf8;color:#0a0e1a;border:none;padding:7px 14px;border-radius:10px;cursor:pointer;font-size:13px;font-weight:600">✅ Perpanjang</button>
+    </div>
+  </div>
+</div>
+
+<script>
+function openRenew() {
+  document.getElementById('modal-renew').style.display = 'flex';
+}
+
+async function doRenew() {
+  const voucher = document.getElementById('renew-voucher').value.toUpperCase();
+  const paket = document.getElementById('renew-paket').value;
+  const msg = document.getElementById('renew-msg');
+  if (!voucher) { showMsg('Masukkan kode voucher!', 'error'); return; }
+  
+  const fd = new FormData();
+  fd.append('action', 'renew');
+  fd.append('voucher', voucher);
+  fd.append('paket', paket);
+  
+  const res = await fetch('/user.php', { method: 'POST', body: fd });
+  const data = await res.json();
+  
+  if (data.success) {
+    showMsg('✅ ' + data.msg, 'success');
+    setTimeout(() => location.reload(), 2000);
+  } else {
+    showMsg('❌ ' + data.msg, 'error');
+  }
+}
+
+function showMsg(text, type) {
+  const el = document.getElementById('renew-msg');
+  el.style.display = 'block';
+  el.style.background = type === 'success' ? 'rgba(52,211,153,.1)' : 'rgba(248,113,113,.1)';
+  el.style.border = type === 'success' ? '1px solid rgba(52,211,153,.2)' : '1px solid rgba(248,113,113,.2)';
+  el.style.color = type === 'success' ? '#34d399' : '#f87171';
+  el.textContent = text;
+}
+</script>
+
+<!-- MODAL PERPANJANG -->
+<div id="modal-renew" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:1000;align-items:center;justify-content:center">
+  <div style="background:#111827;border:1px solid rgba(99,179,237,0.25);border-radius:14px;padding:28px;width:100%;max-width:420px">
+    <h3 style="font-size:16px;font-weight:600;margin-bottom:20px">🔄 Perpanjang VPS</h3>
+    <div style="margin-bottom:16px">
+      <label style="display:block;font-size:12px;color:#64748b;margin-bottom:6px;text-transform:uppercase">Paket</label>
+      <select id="renew-paket" style="width:100%;background:#1a2235;border:1px solid rgba(99,179,237,0.12);border-radius:10px;padding:9px 12px;color:#e2e8f0;font-size:13.5px;outline:none">
+        <option value="bulanan">Bulanan (+30 hari)</option>
+        <option value="tahunan">Tahunan (+365 hari)</option>
+      </select>
+    </div>
+    <div style="margin-bottom:20px">
+      <label style="display:block;font-size:12px;color:#64748b;margin-bottom:6px;text-transform:uppercase">Kode Voucher</label>
+      <input type="text" id="renew-voucher" placeholder="ABCD1234" style="width:100%;background:#1a2235;border:1px solid rgba(99,179,237,0.12);border-radius:10px;padding:9px 12px;color:#e2e8f0;font-size:13.5px;outline:none;text-transform:uppercase">
+    </div>
+    <div id="renew-msg" style="display:none;padding:10px;border-radius:8px;font-size:12px;margin-bottom:16px;text-align:center"></div>
+    <div style="display:flex;gap:10px;justify-content:flex-end">
+      <button onclick="document.getElementById('modal-renew').style.display='none'" style="background:transparent;border:1px solid rgba(99,179,237,0.25);color:#94a3b8;padding:7px 14px;border-radius:10px;cursor:pointer;font-size:13px">Batal</button>
+      <button onclick="doRenew()" style="background:#38bdf8;color:#0a0e1a;border:none;padding:7px 14px;border-radius:10px;cursor:pointer;font-size:13px;font-weight:600">✅ Perpanjang</button>
+    </div>
+  </div>
+</div>
+
+<script>
+function openRenew() {
+  document.getElementById('modal-renew').style.display = 'flex';
+}
+
+async function doRenew() {
+  const voucher = document.getElementById('renew-voucher').value.toUpperCase();
+  const paket = document.getElementById('renew-paket').value;
+  const msg = document.getElementById('renew-msg');
+  if (!voucher) { showMsg('Masukkan kode voucher!', 'error'); return; }
+  
+  const fd = new FormData();
+  fd.append('action', 'renew');
+  fd.append('voucher', voucher);
+  fd.append('paket', paket);
+  
+  const res = await fetch('/user.php', { method: 'POST', body: fd });
+  const data = await res.json();
+  
+  if (data.success) {
+    showMsg('✅ ' + data.msg, 'success');
+    setTimeout(() => location.reload(), 2000);
+  } else {
+    showMsg('❌ ' + data.msg, 'error');
+  }
+}
+
+function showMsg(text, type) {
+  const el = document.getElementById('renew-msg');
+  el.style.display = 'block';
+  el.style.background = type === 'success' ? 'rgba(52,211,153,.1)' : 'rgba(248,113,113,.1)';
+  el.style.border = type === 'success' ? '1px solid rgba(52,211,153,.2)' : '1px solid rgba(248,113,113,.2)';
+  el.style.color = type === 'success' ? '#34d399' : '#f87171';
+  el.textContent = text;
+}
 </script>
 </body>
 </html>
