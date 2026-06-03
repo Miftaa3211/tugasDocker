@@ -7,9 +7,9 @@ password=`echo "$QUERY_STRING" | awk '{split($0,array,"&")} END{print array[3]}'
 email=`echo "$QUERY_STRING" | awk '{split($0,array,"&")} END{print array[4]}' | awk '{split($0,array,"=")} END{print array[2]}'`
 wa=`echo "$QUERY_STRING" | awk '{split($0,array,"&")} END{print array[5]}' | awk '{split($0,array,"=")} END{print array[2]}'`
 cek=`echo "$QUERY_STRING" | awk '{split($0,array,"&")} END{print array[6]}' | awk '{split($0,array,"=")} END{print array[2]}'`
-line=$(head -n 1 acak201.txt)
-port=$(head -n 1 port.txt)
-portweb=$(head -n 1 portweb.txt)
+line=$(head -n 1 /usr/lib/cgi-bin/acak201.txt)
+port=$(head -n 1 /usr/lib/cgi-bin/port.txt)
+portweb=$(head -n 1 /usr/lib/cgi-bin/portweb.txt)
 tanggal=$(date +%d-%m-%Y)
 random=$(tr -dc a-z0-9 </dev/urandom | head -c 13 ; echo '')
 function urldecode() { : "${*//+/ }"; echo -e "${_//%/\x}"; }
@@ -32,15 +32,15 @@ else
 if [ -n "$(ls /home/checkdata/$email | xargs -n 1 basename)" ]; then
 echo "E-mail ini sudah digunakan, silahkan gunakan e-mail yang lain"
 else
-if ! grep -Fxq "$cek" vouchers.txt; then
+if ! grep -Fxq "$cek" /usr/lib/cgi-bin/vouchers.txt; then
 echo "Kode voucher tersebut sudah digunakan, silahkan menggunakan voucher lain"
 else
-sed -i "/^$cek$/d" vouchers.txt
+sed -i "/^$cek$/d" /usr/lib/cgi-bin/vouchers.txt
 echo "username $name password $password. Salam dari kami yaa" | mail -s "Informasi username dan password akun" $email
 echo $email > /home/checkdata/$email
 echo $name, $password, $email, $wa, $tanggal, $port. > /home/checkdata2/$email
 acak=$(tr -dc 2-5 </dev/urandom | head -c 10 ; echo '')
-echo $acak > acak201.txt
+echo $acak > /usr/lib/cgi-bin/acak201.txt
 convert \
     -size 725x100 \
     xc:lightblue \
@@ -89,12 +89,13 @@ sed -i "s/nomor/$portweb/g" /etc/apache2/sites-available/$nameroot.conf
 sudo a2ensite $name.conf
 sudo a2ensite $nameroot.conf
 sudo systemctl reload apache2
+docker run -d --name server${port} -e ROOT_PASSWORD=${password} -p ${port}:22 -p ${portweb}:80 --restart=always xcodedata
 sudo cp /usr/lib/cgi-bin/aktivasi3.sh /usr/lib/cgi-bin/aktivasi4.sh
 sed -i "s/unik/$name/g" /usr/lib/cgi-bin/aktivasi4.sh
 chmod 777 aktivasi4.sh
 ./aktivasi4.sh
 rm aktivasi4.sh
-cp /usr/lib/cgi-bin/running100.php  /usr/lib/cgi-bin/running200.php
+cp /usr/lib/cgi-bin/running100.php /usr/lib/cgi-bin/running200.php
 sed -i "s/unikport/$port/g" /usr/lib/cgi-bin/running200.php
 sed -i "s/numberdata/$portweb/g" /usr/lib/cgi-bin/running200.php
 sed -i "s/unikuser/$name/g" /usr/lib/cgi-bin/running200.php
@@ -105,16 +106,16 @@ sudo php running200.php
 cp /usr/lib/cgi-bin/running2.php /usr/lib/cgi-bin/list/running$port.php
 a=1
 port=$((port+a))
-echo $port > port.txt
-cp port.txt /var/www/html
-port2=$(head -n 1 port.txt)
+echo $port > /usr/lib/cgi-bin/port.txt
+cp /usr/lib/cgi-bin/port.txt /var/www/html
+port2=$(head -n 1 /usr/lib/cgi-bin/port.txt)
 b=1
 port2=$((port-b))
 x=1
 portweb=$((portweb+x))
-echo $portweb > portweb.txt
-cp portweb.txt /var/www/html
-portweb2=$(head -n 1 portweb.txt)
+echo $portweb > /usr/lib/cgi-bin/portweb.txt
+cp /usr/lib/cgi-bin/portweb.txt /var/www/html
+portweb2=$(head -n 1 /usr/lib/cgi-bin/portweb.txt)
 y=1
 portweb2=$((portweb-y))
 cat <<EOT
@@ -135,6 +136,9 @@ Host : konek.tugaspkl.my.id<br />
 Port : $port2<br />
 Username : root <br />
 Password : $password<br />
+<br />
+Akses cPanel Admin:<br />
+<a href="https://tugaspkl.my.id">https://tugaspkl.my.id</a><br />
 <br />
 <br/>
 <br>
