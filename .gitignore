@@ -1,5 +1,8 @@
 wa.conf
-*.bak
-*.bak2
 port.txt
 portweb.txt
+*.bak
+*.bak2
+*.zip
+*.gz
+acak201.txt
