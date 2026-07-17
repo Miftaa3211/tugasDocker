@@ -16,9 +16,9 @@ define('CHECKDATA2_DIR', '/home/checkdata2/');
 define('CHECKDATA_DIR', '/home/checkdata/');
 define('RAMBUTAN_DIR', '/home/rambutan/');
 define('LOG_FILE', '/tmp/activity.log');
-define('CF_ZONE', getenv('CF_ZONE') ?: '');
-define('CF_EMAIL', getenv('CF_EMAIL') ?: '');
-define('CF_KEY', getenv('CF_KEY') ?: '');
+define('CF_ZONE', '3902676282e7d9649acadfde7e43278f');
+define('CF_EMAIL', 'mftharizky@gmail.com');
+define('CF_KEY', 'c57c3a383e270f1e3978515157339c40474e1');
 define('CF_DOMAIN', 'tugaspkl.my.id');
 define('WA_CONF', '/var/www/html/tugasDocker/wa.conf');
 
@@ -267,7 +267,7 @@ if (isset($_POST['action']) && isset($_SESSION['logged_in'])) {
     if ($action==='generate_vouchers') {
         $count=(int)($_POST['count']??100);
         $v=[];
-        for($i=0;$i<$count;$i++) $v[]=strtoupper(substr(bin2hex(random_bytes(5)),0,8));
+        for($i=0;$i<$count;$i++) $v[]=strtolower(substr(bin2hex(random_bytes(5)),0,8));
         file_put_contents(VOUCHER_FILE,implode("\n",$v));
         logActivity("$count voucher baru digenerate",'voucher');
         echo json_encode(['success'=>true,'msg'=>"$count voucher digenerate",'count'=>$count]);
